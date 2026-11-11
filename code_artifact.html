@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>자율주행 배달 로봇 제어 및 모니터링 대시보드</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter & Orbitron -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            bg: '#0b0f19',
+                            card: '#111827',
+                            border: '#1f293d',
+                            primary: '#06b6d4',
+                            secondary: '#3b82f6',
+                            accent: '#10b981',
+                            warning: '#f59e0b',
+                            danger: '#ef4444',
+                            neon: '#00f0ff'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        tech: ['Orbitron', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body {
+            background-color: #0b0f19;
+            color: #e5e7eb;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+        
+        .tech-font {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        /* Glowing HUD effects */
+        .glow-cyan {
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+        }
+        .glow-green {
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+        }
+        .glow-red {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+        }
+        
+        /* Grid background overlay */
+        .bg-grid-pattern {
+            background-size: 30px 30px;
+            background-image: 
+                linear-gradient(to right, rgba(31, 41, 61, 0.4) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(31, 41, 61, 0.4) 1px, transparent 1px);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b0f19;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f293d;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #06b6d4;
+        }
+
+        /* Camera scan animation */
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        .scan-line {
+            animation: scanline 2.5s linear infinite;
+        }
+        
+        /* Radar radar effect */
+        @keyframes radar-sweep {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .radar-sweep-anim {
+            animation: radar-sweep 4s linear infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-2 md:p-6 bg-grid-pattern">
+
+    <!-- Top Navigation Header -->
+    <header class="w-full max-w-7xl mx-auto mb-4 bg-cyber-card/90 backdrop-blur border border-cyber-border rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-2xl">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-cyan-500/10 border border-cyan-500/40 flex items-center justify-center text-cyan-400 text-xl font-bold glow-cyan">
+                <i class="fa-solid fa-robot"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-wider text-white tech-font flex items-center gap-2">
+                    ROBO-DELIVER <span class="text-xs px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">v2.5 AI</span>
+                </h1>
+                <p class="text-xs text-gray-400">적외선/초음파 & 비전 AI 기반 자율주행 배달 로봇 모니터링</p>
+            </div>
+        </div>
+
+        <!-- Robot Quick Info Badges -->
+        <div class="flex items-center gap-4 text-xs">
+            <div class="bg-gray-900/80 border border-cyber-border px-3 py-2 rounded-lg flex items-center gap-2">
+                <span class="text-gray-400">상태:</span>
+                <span id="statusBadge" class="font-bold text-cyan-400 flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span> 대기 중
+                </span>
+            </div>
+            <div class="bg-gray-900/80 border border-cyber-border px-3 py-2 rounded-lg flex items-center gap-2">
+                <span class="text-gray-400">배터리:</span>
+                <span class="font-bold text-emerald-400 flex items-center gap-1">
+                    <i class="fa-solid fa-battery-full text-xs"></i> 98%
+                </span>
+            </div>
+            <div class="bg-gray-900/80 border border-cyber-border px-3 py-2 rounded-lg flex items-center gap-2">
+                <span class="text-gray-400">주문 음식:</span>
+                <span id="currentOrderBadge" class="font-bold text-yellow-400">🍕 페퍼로니 피자</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-5 flex-grow">
+
+        <!-- LEFT PANEL: Interactive Simulation Grid Canvas (7 cols) -->
+        <section class="lg:col-span-7 flex flex-col gap-4">
+            <div class="bg-cyber-card border border-cyber-border rounded-xl p-4 flex flex-col h-full shadow-lg relative overflow-hidden">
+                
+                <!-- Canvas Title Bar & Mode Controls -->
+                <div class="flex justify-between items-center mb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-map-location-dot text-cyan-400"></i>
+                        <h2 class="text-sm font-semibold tracking-wide text-gray-200 tech-font">REAL-TIME SIMULATION MAP</h2>
+                    </div>
+                    
+                    <!-- Map Interaction Mode Toggles -->
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="text-gray-400 hidden sm:inline">맵 클릭 행동:</span>
+                        <button id="toolObstacleBtn" onclick="setMapTool('obstacle')" class="px-2.5 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 hover:bg-cyan-500/30 transition flex items-center gap-1 font-medium">
+                            <i class="fa-solid fa-cube"></i> 장애물 생성/제거
+                        </button>
+                        <button id="toolFoodBtn" onclick="setMapTool('food')" class="px-2.5 py-1 rounded bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700 transition flex items-center gap-1">
+                            <i class="fa-solid fa-utensils"></i> 음식 배치
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Simulation Canvas Wrapper -->
+                <div class="relative flex-grow flex items-center justify-center bg-gray-950/80 border border-cyber-border rounded-lg overflow-hidden min-h-[380px] sm:min-h-[460px]">
+                    <canvas id="simCanvas" class="w-full h-full cursor-pointer"></canvas>
+                    
+                    <!-- Floating Legend Overlay -->
+                    <div class="absolute bottom-3 left-3 bg-gray-900/90 border border-gray-700/80 backdrop-blur rounded-lg px-3 py-2 text-[11px] flex flex-wrap gap-3 text-gray-300 pointer-events-none">
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-cyan-400 inline-block shadow"></span> 로봇</div>
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 bg-amber-500/80 rounded-sm inline-block"></span> 조리실 (Pickup)</div>
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 bg-emerald-500 rounded-sm inline-block"></span> 서빙 테이블 (Goal)</div>
+                        <div class="flex items-center gap-1.5"><span class="w-3 h-3 bg-red-500/80 rounded-sm inline-block"></span> 장애물 (벽)</div>
+                    </div>
+                </div>
+
+                <!-- Interactive Control Buttons -->
+                <div class="mt-4 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <button id="startBtn" onclick="startSimulation()" class="px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg transition flex items-center gap-2 text-sm shadow-lg shadow-cyan-500/20 active:scale-95">
+                            <i class="fa-solid fa-play"></i> 자율주행 시작
+                        </button>
+                        <button id="pauseBtn" onclick="pauseSimulation()" disabled class="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold rounded-lg transition flex items-center gap-2 text-sm opacity-50 cursor-not-allowed">
+                            <i class="fa-solid fa-pause"></i> 일시정지
+                        </button>
+                        <button onclick="resetSimulation()" class="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold rounded-lg transition flex items-center gap-2 text-sm border border-gray-700 active:scale-95">
+                            <i class="fa-solid fa-rotate-left"></i> 리셋
+                        </button>
+                    </div>
+
+                    <!-- Order Selector -->
+                    <div class="flex items-center gap-2">
+                        <label for="orderSelect" class="text-xs text-gray-400 font-medium">주문 음식 선택:</label>
+                        <select id="orderSelect" onchange="changeFoodOrder()" class="bg-gray-900 border border-cyber-border text-xs rounded-lg px-3 py-2 text-yellow-400 font-semibold focus:outline-none focus:border-cyan-500">
+                            <option value="pizza">🍕 페퍼로니 피자</option>
+                            <option value="burger">🍔 수제 치즈버거</option>
+                            <option value="sushi">🍣 모듬 초밥</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT PANEL: Sensors Telemetry & Camera Vision & Log (5 cols) -->
+        <section class="lg:col-span-5 flex flex-col gap-4">
+            
+            <!-- 1. Proximity Sensor Telemetry Block -->
+            <div class="bg-cyber-card border border-cyber-border rounded-xl p-4 shadow-lg">
+                <div class="flex justify-between items-center mb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-wave-square text-cyan-400"></i>
+                        <h2 class="text-xs font-semibold tracking-wider text-gray-300 tech-font">PROXIMITY SENSORS (초음파/적외선)</h2>
+                    </div>
+                    <span id="sensorStatusTag" class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono">NORMAL</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <!-- Distance Sensor Readout -->
+                    <div class="bg-gray-950/80 border border-cyber-border p-3 rounded-lg flex flex-col justify-between">
+                        <span class="text-[11px] text-gray-400">전방 감지 거리</span>
+                        <div class="flex items-baseline gap-1 my-1">
+                            <span id="distanceVal" class="text-2xl font-bold text-cyan-400 font-mono">150</span>
+                            <span class="text-xs text-gray-500">cm</span>
+                        </div>
+                        <div class="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                            <div id="distanceBar" class="bg-cyan-400 h-1.5 rounded-full transition-all duration-200" style="width: 75%"></div>
+                        </div>
+                    </div>
+
+                    <!-- IR Sensor Grid / Hazard Status -->
+                    <div class="bg-gray-950/80 border border-cyber-border p-3 rounded-lg flex flex-col justify-between">
+                        <span class="text-[11px] text-gray-400">장애물 근접 경보</span>
+                        <div id="hazardAlert" class="text-sm font-bold text-emerald-400 flex items-center gap-2 my-1">
+                            <i class="fa-solid fa-shield-halved"></i> 경로 확보됨
+                        </div>
+                        <span id="irSensorDetail" class="text-[10px] text-gray-500">적외선 감지: 정상</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. AI Camera Vision Feed Panel -->
+            <div class="bg-cyber-card border border-cyber-border rounded-xl p-4 shadow-lg flex flex-col flex-grow">
+                <div class="flex justify-between items-center mb-2">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-camera-retro text-cyan-400"></i>
+                        <h2 class="text-xs font-semibold tracking-wider text-gray-300 tech-font">AI VISION CAMERA FEED</h2>
+                    </div>
+                    <span class="text-[10px] text-cyan-400 flex items-center gap-1 font-mono">
+                        <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> LIVE
+                    </span>
+                </div>
+
+                <!-- Camera Viewfinder Window -->
+                <div class="relative bg-black rounded-lg border border-gray-800 overflow-hidden min-h-[160px] flex items-center justify-center group">
+                    
+                    <!-- Scanline Overlay Effect -->
+                    <div id="camScanline" class="hidden absolute inset-0 bg-gradient-to-b from-transparent via-cyan-500/20 to-transparent scan-line pointer-events-none"></div>
+
+                    <!-- Simulated Camera View Output -->
+                    <div id="camDisplay" class="flex flex-col items-center justify-center p-4 text-center z-10 transition-all">
+                        <i class="fa-solid fa-video text-3xl text-gray-700 mb-2"></i>
+                        <p class="text-xs text-gray-500">카메라 비전 센서 대기 중</p>
+                    </div>
+
+                    <!-- Bounding Box Frame Overlay (Visible when object detected) -->
+                    <div id="visionBox" class="hidden absolute inset-4 border-2 border-dashed border-cyan-400/80 rounded-md flex items-start justify-between p-1 pointer-events-none">
+                        <span id="visionBoxTag" class="bg-cyan-500 text-slate-950 font-bold text-[10px] px-1.5 py-0.5 rounded">OBJECT DETECTED</span>
+                        <span id="visionConfidence" class="bg-black/70 text-cyan-300 font-mono text-[10px] px-1 rounded">CONF: 98%</span>
+                    </div>
+
+                    <!-- Camera Viewfinder HUD Elements -->
+                    <div class="absolute top-2 left-2 text-[9px] font-mono text-gray-500">RES: 1080p | 60FPS</div>
+                    <div class="absolute bottom-2 right-2 text-[9px] font-mono text-gray-500">AI MODEL: YOLO-V8-ROBO</div>
+                </div>
+
+                <!-- Vision Recognition Result Summary -->
+                <div id="visionResultBar" class="mt-2 bg-gray-950/90 border border-gray-800 rounded-lg p-2.5 text-xs flex items-center justify-between">
+                    <span class="text-gray-400">인식 판별 결과:</span>
+                    <span id="visionText" class="font-bold text-gray-300">대기 중</span>
+                </div>
+            </div>
+
+            <!-- 3. Step-by-Step Execution Log -->
+            <div class="bg-cyber-card border border-cyber-border rounded-xl p-4 shadow-lg flex flex-col h-48">
+                <div class="flex justify-between items-center mb-2">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-cyan-400"></i>
+                        <h2 class="text-xs font-semibold tracking-wider text-gray-300 tech-font">ROBOT EXECUTION LOG</h2>
+                    </div>
+                    <button onclick="clearLogs()" class="text-[10px] text-gray-500 hover:text-gray-300 transition">기록 삭제</button>
+                </div>
+
+                <!-- Scrollable Log Container -->
+                <div id="logContainer" class="flex-grow bg-gray-950/80 border border-cyber-border rounded-lg p-3 overflow-y-auto font-mono text-[11px] space-y-1.5 text-gray-300">
+                    <div class="text-gray-500">[시스템 초기화] 로봇 대기 완료. 대시보드가 준비되었습니다.</div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full max-w-7xl mx-auto mt-4 text-center text-xs text-gray-600">
+        Autonomous Food Delivery Robot Simulation System &copy; 2026 Powered by Sensor Fusion & Vision AI
+    </footer>
+
+    <!-- MAIN JAVASCRIPT LOGIC -->
+    <script>
+        // --- 1. SIMULATION STATE & CONFIGURATION ---
+        const GRID_COLS = 12;
+        const GRID_ROWS = 10;
+        
+        let canvas, ctx;
+        let cellWidth, cellHeight;
+
+        // Current Selected Order Food
+        let selectedFood = {
+            id: 'pizza',
+            name: '페퍼로니 피자',
+            icon: '🍕'
+        };
+
+        const FOOD_TYPES = {
+            pizza: { id: 'pizza', name: '페퍼로니 피자', icon: '🍕' },
+            burger: { id: 'burger', name: '수제 치즈버거', icon: '🍔' },
+            sushi: { id: 'sushi', name: '모듬 초밥', icon: '🍣' }
+        };
+
+        // Grid World Setup
+        let robot = { x: 1, y: 1, angle: 0, targetX: 1, targetY: 1, hasFood: false };
+        let pickupStation = { x: 10, y: 1 };  // Food Pickup Location
+        let customerTable = { x: 10, y: 8 };  // Customer Goal Location
+        let obstacles = [
+            { x: 5, y: 1 }, { x: 5, y: 2 }, { x: 5, y: 3 }, { x: 5, y: 4 }, // Obstacle Wall
+            { x: 8, y: 6 }, { x: 8, y: 7 }
+        ];
+
+        // Interaction Tools
+        let currentTool = 'obstacle'; // 'obstacle' or 'food'
+
+        // Foods at Pickup Station (Target food vs Incorrect food)
+        let pickupFoods = [
+            { x: 10, y: 1, type: 'pizza', name: '페퍼로니 피자', icon: '🍕' },
+            { x: 10, y: 2, type: 'burger', name: '수제 치즈버거', icon: '🍔' }
+        ];
+
+        // Simulation Execution Controller
+        let isRunning = false;
+        let isPaused = false;
+        let currentStage = 1; // 1: Move to Pickup, 2: Obstacle Avoidance / Path, 3: Verify & Deliver
+        let stepIndex = 0;
+        let plannedPath = [];
+        let animFrameId = null;
+        let simulationSpeed = 400; // ms per grid move
+
+        // --- 2. INITIALIZATION ---
+        window.onload = () => {
+            canvas = document.getElementById('simCanvas');
+            ctx = canvas.getContext('2d');
+            
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Canvas Click Event for Obstacle/Food placement
+            canvas.addEventListener('click', handleCanvasClick);
+
+            resetSimulation();
+        };
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            cellWidth = canvas.width / GRID_COLS;
+            cellHeight = canvas.height / GRID_ROWS;
+            drawMap();
+        }
+
+        // --- 3. RENDERING ENGINE ---
+        function drawMap() {
+            if (!ctx) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Grid Lines
+            ctx.strokeStyle = '#1f293d';
+            ctx.lineWidth = 1;
+            for (let c = 0; c <= GRID_COLS; c++) {
+                ctx.beginPath();
+                ctx.moveTo(c * cellWidth, 0);
+                ctx.lineTo(c * cellWidth, canvas.height);
+                ctx.stroke();
+            }
+            for (let r = 0; r <= GRID_ROWS; r++) {
+                ctx.beginPath();
+                ctx.moveTo(0, r * cellHeight);
+                ctx.lineTo(canvas.width, r * cellHeight);
+                ctx.stroke();
+            }
+
+            // Draw Planned Path Trace
+            if (plannedPath.length > 0) {
+                ctx.strokeStyle = '#06b6d4';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([6, 6]);
+                ctx.beginPath();
+                plannedPath.forEach((pt, idx) => {
+                    let cx = (pt.x + 0.5) * cellWidth;
+                    let cy = (pt.y + 0.5) * cellHeight;
+                    if (idx === 0) ctx.moveTo(cx, cy);
+                    else ctx.lineTo(cx, cy);
+                });
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Draw Obstacles (Walls/Boxes)
+            obstacles.forEach(obs => {
+                ctx.fillStyle = '#ef4444';
+                ctx.shadowColor = 'rgba(239, 68, 68, 0.4)';
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                ctx.roundRect(obs.x * cellWidth + 4, obs.y * cellHeight + 4, cellWidth - 8, cellHeight - 8, 6);
+                ctx.fill();
+                
+                // Texture detail on obstacle
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#b91c1c';
+                ctx.font = '12px FontAwesome';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('\uf1b2', (obs.x + 0.5) * cellWidth, (obs.y + 0.5) * cellHeight);
+            });
+
+            // Draw Food Pickup Station Zone
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.15)';
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(pickupStation.x * cellWidth + 2, pickupStation.y * cellHeight + 2, cellWidth - 4, cellHeight * 2 - 4, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            // Label for Pickup Zone
+            ctx.fillStyle = '#f59e0b';
+            ctx.font = 'bold 10px Inter';
+            ctx.textAlign = 'center';
+            ctx.fillText("조리실 (Pickup)", (pickupStation.x + 0.5) * cellWidth, (pickupStation.y - 0.2) * cellHeight);
+
+            // Draw Foods at Pickup Zone
+            pickupFoods.forEach(food => {
+                ctx.font = `${cellHeight * 0.5}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(food.icon, (food.x + 0.5) * cellWidth, (food.y + 0.5) * cellHeight);
+            });
+
+            // Draw Customer Goal Table Zone
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(customerTable.x * cellWidth + 2, customerTable.y * cellHeight + 2, cellWidth - 4, cellHeight - 4, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#10b981';
+            ctx.font = 'bold 10px Inter';
+            ctx.textAlign = 'center';
+            ctx.fillText("서빙 테이블", (customerTable.x + 0.5) * cellWidth, (customerTable.y + 0.5) * cellHeight - 8);
+            ctx.font = '12px FontAwesome';
+            ctx.fillText("\uf0f5", (customerTable.x + 0.5) * cellWidth, (customerTable.y + 0.5) * cellHeight + 8);
+
+            // Draw Robot
+            drawRobot();
+        }
+
+        function drawRobot() {
+            let rx = (robot.x + 0.5) * cellWidth;
+            let ry = (robot.y + 0.5) * cellHeight;
+            let radius = Math.min(cellWidth, cellHeight) * 0.35;
+
+            ctx.save();
+            ctx.translate(rx, ry);
+
+            // Sensor Cone Range Effect (Ultrasonic/IR Radar View)
+            if (isRunning) {
+                ctx.fillStyle = 'rgba(6, 182, 212, 0.15)';
+                ctx.strokeStyle = 'rgba(6, 182, 212, 0.4)';
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, radius * 2.5, robot.angle - Math.PI / 4, robot.angle + Math.PI / 4);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            // Robot Main Body
+            ctx.shadowColor = '#06b6d4';
+            ctx.shadowBlur = 12;
+            ctx.fillStyle = '#0f172a';
+            ctx.strokeStyle = '#06b6d4';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Direction Arrow Indicator
+            ctx.rotate(robot.angle);
+            ctx.fillStyle = '#00f0ff';
+            ctx.beginPath();
+            ctx.moveTo(radius * 0.7, 0);
+            ctx.lineTo(-radius * 0.4, -radius * 0.4);
+            ctx.lineTo(-radius * 0.2, 0);
+            ctx.lineTo(-radius * 0.4, radius * 0.4);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+
+            // Display Picked-up Food on Robot
+            if (robot.hasFood) {
+                ctx.font = `${cellHeight * 0.4}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(selectedFood.icon, rx, ry - cellHeight * 0.45);
+            }
+        }
+
+        // --- 4. MAP INTERACTION (Clicking Grid) ---
+        function setMapTool(tool) {
+            currentTool = tool;
+            const obsBtn = document.getElementById('toolObstacleBtn');
+            const foodBtn = document.getElementById('toolFoodBtn');
+
+            if (tool === 'obstacle') {
+                obsBtn.className = "px-2.5 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 hover:bg-cyan-500/30 transition flex items-center gap-1 font-medium";
+                foodBtn.className = "px-2.5 py-1 rounded bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700 transition flex items-center gap-1";
+            } else {
+                foodBtn.className = "px-2.5 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 hover:bg-cyan-500/30 transition flex items-center gap-1 font-medium";
+                obsBtn.className = "px-2.5 py-1 rounded bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700 transition flex items-center gap-1";
+            }
+        }
+
+        function handleCanvasClick(e) {
+            if (isRunning) return; // Disable editing while running
+
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            const gridX = Math.floor(clickX / cellWidth);
+            const gridY = Math.floor(clickY / cellHeight);
+
+            // Prevent editing start/pickup/customer positions directly
+            if ((gridX === robot.x && gridY === robot.y) || 
+                (gridX === pickupStation.x && (gridY === pickupStation.y || gridY === pickupStation.y + 1)) ||
+                (gridX === customerTable.x && gridY === customerTable.y)) {
+                return;
+            }
+
+            if (currentTool === 'obstacle') {
+                const obsIndex = obstacles.findIndex(o => o.x === gridX && o.y === gridY);
+                if (obsIndex >= 0) {
+                    obstacles.splice(obsIndex, 1);
+                    addLog(`[맵 변경] (${gridX}, ${gridY}) 위치의 장애물이 제거되었습니다.`);
+                } else {
+                    obstacles.push({ x: gridX, y: gridY });
+                    addLog(`[맵 변경] (${gridX}, ${gridY}) 위치에 벽 장애물이 추가되었습니다.`);
+                }
+            }
+            drawMap();
+        }
+
+        function changeFoodOrder() {
+            const val = document.getElementById('orderSelect').value;
+            selectedFood = FOOD_TYPES[val];
+            document.getElementById('currentOrderBadge').innerText = `${selectedFood.icon} ${selectedFood.name}`;
+            
+            // Sync pickup items
+            pickupFoods = [
+                { x: 10, y: 1, type: selectedFood.id, name: selectedFood.name, icon: selectedFood.icon },
+                { x: 10, y: 2, type: selectedFood.id === 'pizza' ? 'burger' : 'pizza', name: '기타 음료/메뉴', icon: '🥤' }
+            ];
+
+            addLog(`[주문 업데이트] 고객 선택 주문: ${selectedFood.name}`);
+            drawMap();
+        }
+
+        // --- 5. A* PATHFINDING ALGORITHM ---
+        function findPath(startX, startY, targetX, targetY) {
+            let openSet = [];
+            let closedSet = [];
+            let startNode = { x: startX, y: startY, g: 0, h: 0, f: 0, parent: null };
+            openSet.push(startNode);
+
+            while (openSet.length > 0) {
+                // Get node with lowest f
+                let lowestIndex = 0;
+                for (let i = 0; i < openSet.length; i++) {
+                    if (openSet[i].f < openSet[lowestIndex].f) lowestIndex = i;
+                }
+                let current = openSet[lowestIndex];
+
+                // Reached target
+                if (current.x === targetX && current.y === targetY) {
+                    let path = [];
+                    let temp = current;
+                    while (temp) {
+                        path.push({ x: temp.x, y: temp.y });
+                        temp = temp.parent;
+                    }
+                    return path.reverse();
+                }
+
+                openSet.splice(lowestIndex, 1);
+                closedSet.push(current);
+
+                // Check 4 directional neighbors
+                const neighbors = [
+                    { x: current.x + 1, y: current.y },
+                    { x: current.x - 1, y: current.y },
+                    { x: current.x, y: current.y + 1 },
+                    { x: current.x, y: current.y - 1 }
+                ];
+
+                for (let n of neighbors) {
+                    if (n.x < 0 || n.x >= GRID_COLS || n.y < 0 || n.y >= GRID_ROWS) continue;
+                    // Is obstacle?
+                    if (obstacles.some(o => o.x === n.x && o.y === n.y)) continue;
+                    // Is in closed set?
+                    if (closedSet.some(c => c.x === n.x && c.y === n.y)) continue;
+
+                    let gScore = current.g + 1;
+                    let existingNeighbor = openSet.find(o => o.x === n.x && o.y === n.y);
+
+                    if (!existingNeighbor) {
+                        n.g = gScore;
+                        n.h = Math.abs(n.x - targetX) + Math.abs(n.y - targetY); // Manhattan distance
+                        n.f = n.g + n.h;
+                        n.parent = current;
+                        openSet.push(n);
+                    } else if (gScore < existingNeighbor.g) {
+                        existingNeighbor.g = gScore;
+                        existingNeighbor.f = existingNeighbor.g + existingNeighbor.h;
+                        existingNeighbor.parent = current;
+                    }
+                }
+            }
+            return []; // No path found
+        }
+
+        // --- 6. AUTONOMOUS SIMULATION CONTROL & SENSOR LOGIC ---
+        function startSimulation() {
+            if (isRunning && !isPaused) return;
+
+            isRunning = true;
+            isPaused = false;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('startBtn').classList.add('opacity-50', 'cursor-not-allowed');
+            document.getElementById('pauseBtn').disabled = false;
+            document.getElementById('pauseBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+
+            updateStatusBadge('주행 중', 'text-cyan-400');
+            addLog(`[자율주행 시작] 1단계: 조리실(${pickupStation.x}, ${pickupStation.y})로 이동을 시작합니다.`);
+
+            // Plan initial route to Pickup Station
+            plannedPath = findPath(robot.x, robot.y, pickupStation.x, pickupStation.y);
+            stepIndex = 0;
+
+            runSimulationLoop();
+        }
+
+        function pauseSimulation() {
+            isPaused = true;
+            isRunning = false;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('startBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+            document.getElementById('pauseBtn').disabled = true;
+            document.getElementById('pauseBtn').classList.add('opacity-50', 'cursor-not-allowed');
+
+            updateStatusBadge('일시정지', 'text-yellow-400');
+            addLog(`[시스템] 주행이 일시정지 되었습니다.`);
+            clearTimeout(animFrameId);
+        }
+
+        function resetSimulation() {
+            pauseSimulation();
+            robot = { x: 1, y: 1, angle: 0, targetX: 1, targetY: 1, hasFood: false };
+            currentStage = 1;
+            plannedPath = [];
+            
+            updateStatusBadge('대기 중', 'text-cyan-400');
+            updateSensors(150, '정상');
+            resetCameraView();
+            addLog(`[시스템] 로봇 위치 및 미션이 초기화되었습니다.`);
+            drawMap();
+        }
+
+        // Main Simulation Step Loop
+        function runSimulationLoop() {
+            if (!isRunning || isPaused) return;
+
+            if (stepIndex < plannedPath.length) {
+                let nextTile = plannedPath[stepIndex];
+
+                // Calculate robot orientation angle
+                let dx = nextTile.x - robot.x;
+                let dy = nextTile.y - robot.y;
+                if (dx !== 0 || dy !== 0) {
+                    robot.angle = Math.atan2(dy, dx);
+                }
+
+                // Check distance to upcoming obstacle in front (Proximity Sensor simulation)
+                let distToObstacle = checkProximitySensors(nextTile);
+
+                // --- STAGE 2: OBSTACLE DETECTION & VISION CLASSIFICATION ---
+                if (distToObstacle < 40) { // Distance alert trigger
+                    addLog(`[적외선/초음파 센서 경보] 전방 ${distToObstacle}cm 에 장애물 감지! 수톱 후 카메라 비전 작동`);
+                    updateStatusBadge('장애물 감지', 'text-red-400');
+                    updateSensors(distToObstacle, '경고 (장애물 감지)');
+
+                    // Activate AI Vision Camera
+                    triggerVisionScan('obstacle', () => {
+                        addLog(`[AI 카메라 분석] '벽 장애물 (Obstacle)'로 최종 판별됨. 회피 경로(Rerouting) 재계산 시행`);
+                        
+                        // Recalculate A* Path around newly sensed obstacle
+                        let target = (currentStage === 1) ? pickupStation : customerTable;
+                        plannedPath = findPath(robot.x, robot.y, target.x, target.y);
+                        stepIndex = 0;
+
+                        if (plannedPath.length === 0) {
+                            addLog(`[경로 오류] 도달할 수 없는 도달 불가능 지역입니다.`);
+                            pauseSimulation();
+                            return;
+                        }
+
+                        updateStatusBadge('경로 재탐색 완', 'text-cyan-400');
+                        animFrameId = setTimeout(runSimulationLoop, simulationSpeed * 1.5);
+                    });
+                    return;
+                }
+
+                // Normal step forward
+                robot.x = nextTile.x;
+                robot.y = nextTile.y;
+                stepIndex++;
+                updateSensors(Math.floor(Math.random() * 20) + 120, '정상');
+                drawMap();
+
+                animFrameId = setTimeout(runSimulationLoop, simulationSpeed);
+
+            } else {
+                // Reached destination for current stage!
+                handleStageCompletion();
+            }
+        }
+
+        // Check Ultrasonic / IR sensor simulation logic
+        function checkProximitySensors(nextTile) {
+            // If next tile is directly blocked by an obstacle
+            if (obstacles.some(o => o.x === nextTile.x && o.y === nextTile.y)) {
+                return 25; // 25cm critical proximity
+            }
+            return 140; // Safe distance
+        }
+
+        // --- 7. STAGE HANDLING & CAMERA AI SCAN ---
+        function handleStageCompletion() {
+            // Stage 1 -> Stage 3 (Food Arrival & Verification)
+            if (currentStage === 1 && robot.x === pickupStation.x && robot.y === pickupStation.y) {
+                updateStatusBadge('음식 수령 지점 도착', 'text-yellow-400');
+                addLog(`[목적지 도착] 조리실에 도착했습니다. 카메라 센서로 заказа된 음식을 스캔합니다.`);
+
+                // Stage 3: Camera Food Verification Logic
+                triggerVisionScan('food_scan', () => {
+                    robot.hasFood = true;
+                    currentStage = 3; // Delivery Stage
+                    addLog(`[음식 검증 완료] 카메라 AI: 주문한 '${selectedFood.name}' 확인 완료! 음식을 픽업합니다.`);
+                    addLog(`[자율주행 3단계] 고객 서빙 테이블(${customerTable.x}, ${customerTable.y})로 이동을 시작합니다.`);
+
+                    updateStatusBadge('배달 주행 중', 'text-emerald-400');
+                    plannedPath = findPath(robot.x, robot.y, customerTable.x, customerTable.y);
+                    stepIndex = 0;
+                    drawMap();
+
+                    animFrameId = setTimeout(runSimulationLoop, simulationSpeed * 1.5);
+                });
+
+            } else if (currentStage === 3 && robot.x === customerTable.x && robot.y === customerTable.y) {
+                // Final Delivery Complete
+                robot.hasFood = false;
+                updateStatusBadge('배달 완료!', 'text-emerald-400');
+                addLog(`[배달 성공] 고객 테이블 도착! 음식을 안전하게 전달하였습니다. 🎉`);
+                pauseSimulation();
+                drawMap();
+            }
+        }
+
+        // Simulated AI Camera Feed Visual FX & Recognition
+        function triggerVisionScan(type, onComplete) {
+            const display = document.getElementById('camDisplay');
+            const scanline = document.getElementById('camScanline');
+            const visionBox = document.getElementById('visionBox');
+            const visionBoxTag = document.getElementById('visionBoxTag');
+            const visionText = document.getElementById('visionText');
+
+            scanline.classList.remove('hidden');
+            display.innerHTML = `
+                <i class="fa-solid fa-spinner animate-spin text-3xl text-cyan-400 mb-2"></i>
+                <p class="text-xs text-cyan-300 font-mono animate-pulse">카메라 비전 분석 중...</p>
+            `;
+            visionText.innerText = "스캔 분석 진행 중...";
+            visionText.className = "font-bold text-yellow-400";
+
+            setTimeout(() => {
+                scanline.classList.add('hidden');
+                visionBox.classList.remove('hidden');
+
+                if (type === 'obstacle') {
+                    display.innerHTML = `
+                        <i class="fa-solid fa-cubes text-4xl text-red-500 mb-1"></i>
+                        <p class="text-xs font-bold text-red-400">벽 / 통로 장애물</p>
+                    `;
+                    visionBoxTag.innerText = "DETECTED: OBSTACLE";
+                    visionBoxTag.className = "bg-red-500 text-white font-bold text-[10px] px-1.5 py-0.5 rounded";
+                    visionText.innerText = "장애물 (벽) 감지됨 ➔ 회피 실행";
+                    visionText.className = "font-bold text-red-400";
+                } else {
+                    display.innerHTML = `
+                        <span class="text-4xl mb-1">${selectedFood.icon}</span>
+                        <p class="text-xs font-bold text-emerald-400">${selectedFood.name}</p>
+                    `;
+                    visionBoxTag.innerText = "MATCHED: ORDERED FOOD";
+                    visionBoxTag.className = "bg-emerald-500 text-slate-950 font-bold text-[10px] px-1.5 py-0.5 rounded";
+                    visionText.innerText = `주문 음식 일치 (${selectedFood.name})`;
+                    visionText.className = "font-bold text-emerald-400";
+                }
+
+                if (onComplete) setTimeout(onComplete, 1200);
+
+            }, 1000);
+        }
+
+        function resetCameraView() {
+            document.getElementById('camScanline').classList.add('hidden');
+            document.getElementById('visionBox').classList.add('hidden');
+            document.getElementById('camDisplay').innerHTML = `
+                <i class="fa-solid fa-video text-3xl text-gray-700 mb-2"></i>
+                <p class="text-xs text-gray-500">카메라 비전 센서 대기 중</p>
+            `;
+            document.getElementById('visionText').innerText = "대기 중";
+            document.getElementById('visionText').className = "font-bold text-gray-300";
+        }
+
+        // --- 8. UI UPDATERS & LOGGING ---
+        function updateSensors(distanceCm, statusText) {
+            document.getElementById('distanceVal').innerText = distanceCm;
+            const bar = document.getElementById('distanceBar');
+            const percent = Math.min(Math.max((distanceCm / 200) * 100, 5), 100);
+            bar.style.width = `${percent}%`;
+
+            const alertBox = document.getElementById('hazardAlert');
+            const detailTag = document.getElementById('irSensorDetail');
+            const sensorTag = document.getElementById('sensorStatusTag');
+
+            if (distanceCm < 40) {
+                bar.className = "bg-red-500 h-1.5 rounded-full transition-all duration-200";
+                alertBox.className = "text-sm font-bold text-red-400 flex items-center gap-2 my-1 animate-pulse";
+                alertBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 장애물 접근 경보!';
+                detailTag.innerText = `적외선/초음파 반사파 수신: ${distanceCm}cm`;
+                sensorTag.innerText = "WARNING";
+                sensorTag.className = "text-[10px] px-2 py-0.5 rounded bg-red-500/20 text-red-400 font-mono";
+            } else {
+                bar.className = "bg-cyan-400 h-1.5 rounded-full transition-all duration-200";
+                alertBox.className = "text-sm font-bold text-emerald-400 flex items-center gap-2 my-1";
+                alertBox.innerHTML = '<i class="fa-solid fa-shield-halved"></i> 경로 확보됨';
+                detailTag.innerText = "적외선 감지: 정상 범위";
+                sensorTag.innerText = "NORMAL";
+                sensorTag.className = "text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono";
+            }
+        }
+
+        function updateStatusBadge(text, colorClass) {
+            const badge = document.getElementById('statusBadge');
+            badge.className = `font-bold ${colorClass} flex items-center gap-1.5`;
+            badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-current animate-ping"></span> ${text}`;
+        }
+
+        function addLog(message) {
+            const container = document.getElementById('logContainer');
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+            
+            const item = document.createElement('div');
+            item.className = "leading-tight border-l-2 border-cyan-500/40 pl-2 py-0.5";
+            item.innerHTML = `<span class="text-gray-500 text-[10px]">[${timeStr}]</span> ${message}`;
+            
+            container.appendChild(item);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('logContainer').innerHTML = `
+                <div class="text-gray-500">[시스템] 실행 로그가 초기화되었습니다.</div>
+            `;
+        }
+    </script>
+</body>
+</html>
